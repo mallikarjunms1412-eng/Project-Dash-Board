@@ -1,0 +1,1154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Project Progress Dashboard — Editable</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --bg-base:#F3EFE6;
+    --bg-panel:#FFFFFF;
+    --bg-panel-2:#FBF8F2;
+    --grid-line:rgba(60,30,10,0.05);
+    --grid-line-strong:rgba(60,30,10,0.12);
+    --accent-amber:#A8641A;
+    --accent-cyan:#1F7A94;
+    --behind:#B23A2A;
+    --text-primary:#2B211C;
+    --text-muted:#5C4A3E;
+    --text-dim:#8A7568;
+    --border:rgba(60,30,10,0.18);
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:
+      linear-gradient(var(--grid-line) 1px, transparent 1px) 0 0/32px 32px,
+      linear-gradient(90deg, var(--grid-line) 1px, transparent 1px) 0 0/32px 32px,
+      var(--bg-base);
+    color:var(--text-primary);
+    font-family:'Cambria',Georgia,serif;
+    padding:28px;
+    min-height:100vh;
+  }
+  .sheet{
+    max-width:1100px;
+    margin:0 auto;
+    border:1px solid var(--border);
+    background:#FFFFFF;
+  }
+  .titleblock{
+    display:flex;justify-content:space-between;align-items:flex-end;
+    border-bottom:2px solid var(--accent-cyan);padding:20px 24px;flex-wrap:wrap;gap:16px;
+  }
+  .titleblock h1{
+    font-family:'Cambria',Georgia,serif;font-weight:600;font-size:26px;letter-spacing:0.03em;
+    margin:0;text-transform:uppercase;
+  }
+  .titleblock .sub{font-family:'Cambria',Georgia,serif;font-size:12px;color:var(--text-muted);margin-top:4px;}
+  .toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+  .btn{
+    font-family:'Cambria',Georgia,serif;font-size:11px;text-transform:uppercase;letter-spacing:0.05em;
+    background:transparent;color:var(--accent-cyan);border:1px solid var(--accent-cyan);
+    padding:7px 12px;cursor:pointer;transition:background 0.15s ease;
+  }
+  .btn:hover{background:rgba(111,211,232,0.12);}
+  .btn.amber{color:var(--accent-amber);border-color:var(--accent-amber);}
+  .btn.amber:hover{background:rgba(232,163,61,0.12);}
+  .btn.small{padding:4px 8px;font-size:10px;}
+
+  .summary{display:grid;grid-template-columns:repeat(4,1fr);border-bottom:1px solid var(--border);}
+  .summary .cell{padding:16px 24px;border-right:1px solid var(--border);}
+  .summary .cell:last-child{border-right:none;}
+  .summary .label{
+    font-family:'Cambria',Georgia,serif;font-size:10px;letter-spacing:0.08em;
+    text-transform:uppercase;color:var(--text-dim);
+  }
+  .summary .value{font-family:'Cambria',Georgia,serif;font-size:26px;margin-top:4px;}
+  .summary .value.amber{color:var(--accent-amber);}
+  .summary .value.cyan{color:var(--accent-cyan);}
+  .summary .value.behind{color:var(--behind);}
+
+  .master-wrap{border-bottom:1px solid var(--border);padding:16px 24px 20px;}
+  .master-wrap .section-title{
+    font-family:'Cambria',Georgia,serif;font-size:10px;text-transform:uppercase;
+    letter-spacing:0.08em;color:var(--text-dim);margin-bottom:8px;
+  }
+  .chart-box{border:1px solid var(--border);padding:12px;}
+  .combined-legend{
+    display:flex;flex-wrap:wrap;gap:14px;margin-top:10px;
+    font-family:'Cambria',Georgia,serif;font-size:11px;color:var(--text-muted);
+  }
+  .combined-legend .leg-item{display:flex;align-items:center;gap:6px;}
+  .combined-legend .swatch{width:10px;height:10px;flex:none;}
+
+  .cal-header{display:flex;align-items:center;justify-content:center;gap:16px;margin-bottom:10px;}
+  .cal-month-label{
+    font-family:'Cambria',Georgia,serif;font-size:15px;letter-spacing:0.04em;
+    text-transform:uppercase;min-width:140px;text-align:center;
+  }
+  .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:1px;background:var(--border);}
+  .cal-dow{
+    background:var(--bg-panel);text-align:center;padding:6px 0;
+    font-family:'Cambria',Georgia,serif;font-size:9.5px;color:var(--text-dim);
+    text-transform:uppercase;letter-spacing:0.05em;
+  }
+  .cal-day{
+    background:var(--bg-panel);min-height:110px;padding:8px;cursor:pointer;
+    transition:background 0.15s ease;position:relative;
+  }
+  .cal-day.empty{cursor:default;background:transparent;}
+  .cal-day:not(.empty):hover{background:var(--bg-panel-2);}
+  .cal-day.selected{background:var(--bg-panel-2);box-shadow:inset 0 0 0 2px var(--accent-cyan);}
+  .cal-day.has-tasks .d-num{color:var(--text-primary);font-weight:600;}
+  .cal-day .d-num{font-family:'Cambria',Georgia,serif;font-size:11px;color:var(--text-muted);}
+  .cal-day .d-tasks{display:flex;flex-direction:column;gap:2px;margin-top:4px;}
+  .cal-day .d-task{
+    font-family:'Cambria',Georgia,serif;font-size:9px;line-height:1.3;
+    padding:1px 4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+    border-left:2px solid currentColor;
+  }
+  .cal-day .d-task.planned{color:var(--accent-amber);background:rgba(184,118,30,0.08);}
+  .cal-day .d-task.completed{color:var(--accent-cyan);background:rgba(31,122,148,0.08);}
+  .cal-day .d-more{font-family:'Cambria',Georgia,serif;font-size:9px;color:var(--text-dim);padding-left:4px;}
+  .cal-selected{margin-top:14px;font-family:'Cambria',Georgia,serif;font-size:12px;}
+  .cal-selected .cs-title{
+    font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-dim);margin-bottom:8px;
+  }
+
+  .cal-modal-overlay{
+    display:none;position:fixed;inset:0;z-index:900;
+    background:rgba(0,0,0,0.55);
+    align-items:center;justify-content:center;
+  }
+  .cal-modal-overlay.open{display:flex;}
+  .cal-modal-box{
+    background:var(--bg-base);border:1px solid var(--border);
+    box-shadow:0 10px 40px rgba(0,0,0,0.4);
+    width:min(1100px, 96vw);max-height:94vh;overflow-y:auto;
+    padding:24px 28px;
+  }
+  .cal-modal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
+
+  .cal-task-row{
+    display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--grid-line-strong);
+    flex-wrap:wrap;
+  }
+  .cal-task-row .badge{
+    font-size:9.5px;text-transform:uppercase;letter-spacing:0.04em;padding:1px 6px;border:1px solid currentColor;
+  }
+  .cal-task-row .badge.planned{color:var(--accent-amber);}
+  .cal-task-row .badge.completed{color:var(--accent-cyan);}
+  .cal-task-row .cs-path{color:var(--text-muted);}
+  .cal-empty-msg{color:var(--text-dim);font-style:italic;}
+
+  .detail{padding:22px 24px 28px;}
+  .detail-head{
+    display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:16px;
+  }
+  .detail-head h2{
+    font-family:'Cambria',Georgia,serif;font-size:20px;margin:0;text-transform:uppercase;letter-spacing:0.02em;
+  }
+  select.status-select{
+    background:var(--bg-panel);border:1px solid var(--border);
+    font-family:'Cambria',Georgia,serif;font-size:11px;padding:6px 8px;
+    text-transform:uppercase;letter-spacing:0.03em;color:var(--text-primary);
+  }
+  .field-row{
+    font-family:'Cambria',Georgia,serif;font-size:12px;color:var(--text-muted);
+    margin-bottom:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;
+  }
+  .field-row input, .field-row select{
+    background:var(--bg-panel);border:1px solid var(--border);color:var(--text-primary);
+    font-family:'Cambria',Georgia,serif;font-size:12px;padding:5px 8px;
+  }
+  .field-row input.name-input{width:180px;color:var(--text-primary);font-family:'Cambria',Georgia,serif;font-size:13px;}
+  .field-row .comp{color:var(--accent-cyan);font-weight:600;}
+  .field-row .pend{color:var(--accent-amber);font-weight:600;}
+
+  .status{
+    font-family:'Cambria',Georgia,serif;font-size:10px;letter-spacing:0.05em;
+    text-transform:uppercase;padding:2px 6px;display:inline-block;border:1px solid currentColor;
+  }
+  .status.ontrack{color:var(--accent-cyan);}
+  .status.watch{color:var(--accent-amber);}
+  .status.behind{color:var(--behind);}
+
+  .ruler{
+    height:12px;background:repeating-linear-gradient(90deg,var(--grid-line-strong) 0 1px, transparent 1px 10%);
+    position:relative;border:1px solid var(--border);margin:10px 0;
+  }
+  .ruler .fill{position:absolute;top:0;left:0;bottom:0;background:var(--accent-cyan);}
+  .ruler .fill.behind{background:var(--behind);}
+
+  .subproj-section table{width:100%;border-collapse:collapse;font-family:'Cambria',Georgia,serif;font-size:12px;}
+
+  .attach-section{margin-bottom:16px;}
+  .attach-list{display:flex;flex-direction:column;gap:6px;margin-bottom:10px;}
+  .attach-row{
+    display:flex;align-items:center;gap:10px;padding:6px 10px;
+    background:var(--bg-panel);border:1px solid var(--border);
+    font-family:'Cambria',Georgia,serif;font-size:12px;
+  }
+  .attach-row .a-icon{
+    font-size:10px;text-transform:uppercase;letter-spacing:0.04em;
+    padding:2px 6px;border:1px solid currentColor;color:var(--accent-cyan);flex:none;
+  }
+  .attach-row .a-icon.pdf{color:var(--behind);}
+  .attach-row .a-icon.xls{color:var(--accent-amber);}
+  .attach-row .a-name{flex:1;color:var(--text-primary);}
+  .attach-row a.a-view{color:var(--accent-cyan);text-decoration:none;font-size:11px;}
+  .attach-row a.a-view:hover{text-decoration:underline;}
+  .attach-empty{color:var(--text-dim);font-style:italic;font-size:11px;}
+  .subproj-section thead th{
+    text-align:left;font-weight:500;color:var(--text-dim);text-transform:uppercase;
+    letter-spacing:0.05em;font-size:10px;padding:6px 8px;border-bottom:1px solid var(--border);
+  }
+  .subproj-section tbody td{padding:6px 8px;border-bottom:1px solid var(--grid-line-strong);vertical-align:middle;}
+  .cell-input{
+    background:transparent;border:none;border-bottom:1px dashed transparent;
+    color:var(--text-primary);font-family:'Cambria',Georgia,serif;font-size:12px;width:100%;padding:2px;
+  }
+  .cell-input:hover, .cell-input:focus{border-bottom:1px dashed var(--accent-cyan);outline:none;}
+  .cell-input.name-cell{font-family:'Cambria',Georgia,serif;font-size:13px;}
+  .num-pend{color:var(--accent-amber);}
+  .comp-cell{color:var(--accent-cyan);font-weight:600;}
+  .pend-cell{color:var(--accent-amber);font-weight:600;}
+  .bar-cell{display:flex;align-items:center;gap:8px;}
+  .bar-track{flex:1;height:6px;background:rgba(232,163,61,0.25);position:relative;}
+  .bar-track .b-fill{position:absolute;top:0;left:0;bottom:0;background:var(--accent-cyan);}
+  .row-del{background:transparent;border:none;color:var(--behind);cursor:pointer;font-size:13px;font-family:'Cambria',Georgia,serif;}
+
+  .sp-progress-wrap{display:flex;align-items:center;gap:8px;min-width:110px;}
+  .sp-progress-bar{
+    position:relative;height:14px;flex:1;
+    background:repeating-linear-gradient(90deg,var(--grid-line-strong) 0 1px, transparent 1px 10%);
+    border:1px solid var(--border);overflow:hidden;
+  }
+  .sp-progress-fill{position:absolute;top:0;left:0;bottom:0;background:var(--accent-cyan);transition:width 0.2s ease;}
+  .sp-progress-label{
+    font-family:'Cambria',Georgia,serif;font-size:10px;font-weight:600;color:var(--accent-cyan);
+    min-width:30px;text-align:right;flex:none;
+  }
+
+  .task-panel{background:var(--bg-panel);padding:8px 4px 10px 24px;}
+  table.task-subtable{width:100%;border-collapse:collapse;font-family:'Cambria',Georgia,serif;font-size:11px;}
+  table.task-subtable thead th{
+    text-align:left;font-weight:500;color:var(--text-dim);text-transform:uppercase;
+    letter-spacing:0.04em;font-size:9px;padding:4px 6px;border-bottom:1px solid var(--border);
+  }
+  table.task-subtable tbody td{padding:4px 6px;border-bottom:1px solid var(--grid-line-strong);}
+  .date-out-of-range{border-bottom:1px dashed var(--behind) !important;color:var(--behind) !important;}
+
+  footer{
+    padding:12px 24px;font-family:'Cambria',Georgia,serif;font-size:10px;color:var(--text-dim);
+    border-top:1px solid var(--border);display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;
+  }
+</style>
+</head>
+<body>
+
+<div class="sheet">
+
+  <div class="titleblock">
+    <div>
+      <h1>Multi-Project Progress Tracker</h1>
+      <div class="sub">Editable — pick a project, set its status directly</div>
+    </div>
+    <div class="toolbar">
+      <button class="btn" id="addProjectBtn">+ Add project</button>
+    </div>
+  </div>
+
+  <div class="summary" id="summaryRow"></div>
+
+  <div class="master-wrap">
+    <div class="section-title">All projects — completed vs pending (bar chart)</div>
+    <div class="chart-box">
+      <svg id="combinedTrendSvg" viewBox="0 0 1080 220" width="100%"></svg>
+      <div id="combinedLegend" class="combined-legend"></div>
+    </div>
+  </div>
+
+  <div class="detail">
+    <div class="detail-head">
+      <h2 id="detailTitle">—</h2>
+      <select id="projectSelect" class="status-select"></select>
+      <button class="btn amber small" id="deleteProjectBtn" title="Delete this project">✕ Delete project</button>
+    </div>
+
+    <div class="field-row">
+      Project name: <input type="text" id="nameInput" class="name-input">
+      Assigned to: <input type="text" id="personInput" class="name-input">
+    </div>
+
+    <div class="field-row">
+      Start date: <input type="date" id="startDateInput" style="width:150px;">
+      End date: <input type="date" id="endDateInput" style="width:150px;">
+      <span style="color:var(--text-dim)">(task planned dates outside this range are flagged in red below)</span>
+    </div>
+
+    <div class="attach-section">
+      <div class="section-title">Attachments</div>
+      <div id="attachList" class="attach-list"></div>
+      <button class="btn small" id="attachUploadBtn">+ Add attachment</button>
+      <input type="file" id="attachFileInput" multiple accept=".pdf,.xls,.xlsx,.csv,.doc,.docx,.png,.jpg,.jpeg" style="display:none;">
+    </div>
+
+    <div class="subproj-section">
+      <button class="btn" id="openCalBtn">📅 View Task Calendar</button>
+    </div>
+
+    <div class="subproj-section">
+      <div class="section-title" style="margin-top:16px;">Tasks (on this project directly)</div>
+      <table class="task-subtable">
+        <thead><tr><th>Done</th><th>Task</th><th>Planned Date</th><th>Completed Date</th><th>Completed %</th><th>Progress</th><th></th></tr></thead>
+        <tbody id="projTaskBody"></tbody>
+      </table>
+      <button class="btn small" id="addProjTaskBtn" style="margin-top:8px;">+ Add task</button>
+    </div>
+
+    <div class="subproj-section">
+      <div class="section-title" style="margin-top:16px;">Task quantity summary — this project</div>
+      <table class="task-subtable">
+        <thead><tr><th>Task type</th><th>Total quantity</th><th>Completed</th><th>Pending</th></tr></thead>
+        <tbody id="taskSummaryBody"></tbody>
+      </table>
+    </div>
+
+    <div class="subproj-section">
+      <div class="section-title" style="margin-top:16px;">Sub-projects</div>
+      <div class="field-row" style="margin-bottom:10px;">
+        Quantity of sub-projects:
+        <input type="number" id="subProjQtyInput" min="0" style="width:60px;">
+        <span style="color:var(--text-dim)">(enter a number and the list below fills in automatically)</span>
+      </div>
+      <table>
+        <thead>
+          <tr><th style="width:28%">Sub-project</th><th style="width:20%">Assigned to</th><th style="width:20%">Completed %</th><th style="width:24%">Progress</th><th style="width:8%"></th></tr>
+        </thead>
+        <tbody id="subProjBody"></tbody>
+      </table>
+      <button class="btn small" id="addSubProjBtn" style="margin-top:8px;">+ Add sub-project</button>
+    </div>
+  </div>
+
+</div>
+
+<div id="calModalOverlay" class="cal-modal-overlay">
+  <div class="cal-modal-box">
+    <div class="cal-modal-head">
+      <div class="section-title" id="calModalTitle">Task calendar</div>
+      <button class="btn small amber" id="closeCalBtn">✕ Close</button>
+    </div>
+    <div class="cal-header">
+      <button class="btn small" id="calPrevBtn">‹ Prev</button>
+      <div class="cal-month-label" id="calMonthLabel">—</div>
+      <button class="btn small" id="calNextBtn">Next ›</button>
+    </div>
+    <div class="cal-grid" id="calGrid"></div>
+    <div class="cal-selected" id="calSelected"></div>
+  </div>
+</div>
+
+<script>
+let projects = [
+  { code:"PROJECT 1", person:"Person 1", planned:80, completed:82, startDate:"2026-07-01", endDate:"2026-08-15", tasks:[
+    {name:"BOM", plannedDate:"2026-07-01", completedDate:"2026-07-01", completed:100}
+  ], subProjects:[
+    { code:"Fabrication Block A", person:"Person 1", completed:0, subProjects:[], tasks:[
+      {name:"Bare Structure", plannedDate:"2026-07-15", completedDate:"2026-07-15", completed:100},
+      {name:"Small Frames", plannedDate:"2026-07-20", completedDate:"", completed:50},
+      {name:"GA Dwg", plannedDate:"2026-07-28", completedDate:"", completed:0}
+    ]},
+    { code:"item-1", person:"Person 1", completed:0, subProjects:[], tasks:[
+      {name:"Bare Structure", plannedDate:"2026-07-12", completedDate:"2026-07-12", completed:100},
+      {name:"Small Frames", plannedDate:"2026-07-18", completedDate:"", completed:25},
+      {name:"GA Dwg", plannedDate:"2026-07-26", completedDate:"", completed:0}
+    ]},
+    { code:"item-2", person:"Person 1", completed:0, subProjects:[], tasks:[
+      {name:"Bare Structure", plannedDate:"2026-07-14", completedDate:"", completed:50},
+      {name:"Small Frames", plannedDate:"2026-07-22", completedDate:"", completed:0},
+      {name:"GA Dwg", plannedDate:"2026-07-30", completedDate:"", completed:0}
+    ]},
+    { code:"item-3", person:"Person 1", completed:0, subProjects:[], tasks:[
+      {name:"Bare Structure", plannedDate:"2026-07-01", completedDate:"", completed:0},
+      {name:"Small Frames", plannedDate:"2026-07-01", completedDate:"", completed:0},
+      {name:"GA Dwg", plannedDate:"2026-07-01", completedDate:"", completed:0}
+    ]}
+  ] },
+  { code:"PROJECT 2", person:"Person 2", planned:85, completed:90, startDate:"2026-06-25", endDate:"2026-08-05", tasks:[
+    {name:"BOM", plannedDate:"2026-06-25", completedDate:"2026-06-26", completed:100}
+  ], subProjects:[] },
+  { code:"PROJECT 3", person:"Person 3", planned:65, completed:50, startDate:"2026-07-05", endDate:"2026-08-20", tasks:[
+    {name:"BOM", plannedDate:"2026-07-06", completedDate:"", completed:50}
+  ], subProjects:[] },
+  { code:"PROJECT 4", person:"Person 4", planned:95, completed:100, startDate:"2026-06-20", endDate:"2026-07-25", tasks:[
+    {name:"BOM", plannedDate:"2026-06-20", completedDate:"2026-06-21", completed:100}
+  ], subProjects:[] },
+  { code:"PROJECT 5", person:"Person 5", planned:45, completed:25, startDate:"2026-07-10", endDate:"2026-09-01", tasks:[
+    {name:"BOM", plannedDate:"2026-07-11", completedDate:"", completed:25}
+  ], subProjects:[] },
+  { code:"PROJECT 6", person:"Person 6", planned:70, completed:50, startDate:"2026-07-08", endDate:"2026-08-10", tasks:[
+    {name:"BOM", plannedDate:"2026-07-09", completedDate:"", completed:50}
+  ], subProjects:[] }
+];
+
+let activeIndex = 0;
+let expandedTaskSet = new Set(["0"]); // set of subproject path strings whose task panel is open
+let calYear = 2026, calMonth = 7; // July 2026, matches sample task dates
+let selectedCalDate = null; // "YYYY-MM-DD" string
+let lastFocusedDateInput = null;
+
+function taskPct(node){
+  if(!node.tasks || !node.tasks.length) return null;
+  const total = node.tasks.reduce((s,t)=> s + (Number(t.completed) || 0), 0);
+  return Math.round(total / node.tasks.length);
+}
+
+function nodePct(node){
+  const values = [];
+  (node.subProjects || []).forEach(c => values.push(nodePct(c)));
+  (node.tasks || []).forEach(t => values.push(Number(t.completed) || 0));
+  if(values.length){
+    const total = values.reduce((s,v) => s + v, 0);
+    return Math.round(total / values.length);
+  }
+  return Number(node.completed) || 0;
+}
+
+function todayVal(p){ return nodePct(p); }
+
+function statusFor(p){
+  const gap = p.planned - todayVal(p);
+  if(gap <= 3) return {label:"On track", cls:"ontrack"};
+  if(gap <= 12) return {label:"Watch", cls:"watch"};
+  return {label:"Behind", cls:"behind"};
+}
+
+function defaultTasks(){
+  const proj = projects[activeIndex];
+  const start = (proj && proj.startDate) || "";
+  return [
+    {name:"Bare Structure", plannedDate:start, completedDate:"", completed:0},
+    {name:"Small Frames", plannedDate:start, completedDate:"", completed:0},
+    {name:"GA Dwg", plannedDate:start, completedDate:"", completed:0}
+  ];
+}
+
+function getContainerAndIndex(p, path){
+  let arr = p.subProjects;
+  for(let i=0;i<path.length-1;i++){
+    arr = arr[path[i]].subProjects;
+  }
+  return {arr, idx: path[path.length-1]};
+}
+
+function getNodeByPath(p, path){
+  const {arr, idx} = getContainerAndIndex(p, path);
+  return arr[idx];
+}
+
+function parseMD(str){
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(str || '');
+  if(!m) return null;
+  const year = parseInt(m[1],10), month = parseInt(m[2],10), day = parseInt(m[3],10);
+  return year*10000 + month*100 + day;
+}
+
+function dateInProjectRange(dateStr, proj){
+  const d = parseMD(dateStr);
+  const s = parseMD(proj.startDate);
+  const e = parseMD(proj.endDate);
+  if(d===null || s===null || e===null) return true; // can't validate, don't flag
+  return d >= s && d <= e;
+}
+
+function buildTaskRowsOnly(node, pathStr){
+  const proj = projects[activeIndex];
+  const tasks = node.tasks || [];
+  if(!tasks.length){
+    return `<tr><td colspan="8" style="color:var(--text-dim);font-style:italic;font-size:11px;padding:6px;">No tasks yet.</td></tr>`;
+  }
+  return tasks.map((t,ti)=>{
+    const c = Number(t.completed) || 0;
+    const pend = 100-c;
+    const isDone = c === 100;
+    const plannedOk = dateInProjectRange(t.plannedDate, proj);
+    return `
+      <tr data-path="${pathStr}" data-task-idx="${ti}">
+        <td style="text-align:center;">
+          <input type="checkbox" class="t-done" data-path="${pathStr}" data-task-idx="${ti}" ${isDone?'checked':''} title="Mark done (100%)">
+        </td>
+        <td><input class="cell-input t-name" data-path="${pathStr}" data-task-idx="${ti}" value="${t.name}"></td>
+        <td>
+          <input type="date" class="cell-input t-planned ${plannedOk?'':'date-out-of-range'}" data-path="${pathStr}" data-task-idx="${ti}" value="${t.plannedDate || ''}" ${plannedOk?'':`title="Outside project timeline (${proj.startDate || '?'} – ${proj.endDate || '?'})"`}>
+        </td>
+        <td>
+          <input type="date" class="cell-input t-completed-date" data-path="${pathStr}" data-task-idx="${ti}" value="${t.completedDate || ''}">
+        </td>
+        <td>
+          <select class="cell-input t-completed" data-path="${pathStr}" data-task-idx="${ti}">
+            ${[0,25,50,75,100].map(v=>`<option value="${v}" ${Math.round(c/25)*25===v?'selected':''}>${v}%</option>`).join('')}
+          </select>
+        </td>
+        <td>
+          <div class="bar-cell"><div class="bar-track"><div class="b-fill" style="width:${c}%"></div></div></div>
+        </td>
+        <td><button class="row-del t-del" data-path="${pathStr}" data-task-idx="${ti}" title="Delete task">✕</button></td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function buildTaskRows(node, pathStr){
+  const rows = buildTaskRowsOnly(node, pathStr);
+  return `
+    <table class="task-subtable">
+      <thead><tr><th>Done</th><th>Task</th><th>Planned Date</th><th>Completed Date</th><th>Completed %</th><th>Progress</th><th></th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+}
+
+function buildSubProjRows(nodes, path){
+  let html = "";
+  nodes.forEach((node,i)=>{
+    const curPath = [...path, i];
+    const pathStr = curPath.join('-');
+    const depth = curPath.length - 1;
+    const hasChildren = node.subProjects && node.subProjects.length > 0;
+    const pct = nodePct(node);
+    const pend = 100 - pct;
+    const indent = depth * 20;
+    const isTasksOpen = expandedTaskSet.has(pathStr);
+    const taskCount = (node.tasks || []).length;
+    const subCount = (node.subProjects || []).length;
+    const isComputed = hasChildren || taskCount > 0;
+
+    let pctCell;
+    if(isComputed){
+      const parts = [];
+      if(subCount) parts.push(`${subCount} sub-project(s)`);
+      if(taskCount) parts.push(`${taskCount} task(s)`);
+      pctCell = `<span style="color:var(--accent-cyan);font-family:'Cambria',Georgia,serif;font-size:12px;" title="Average of ${parts.join(' + ')}">${pct}%</span>`;
+    } else {
+      pctCell = `<select class="cell-input sp-completed" data-path="${pathStr}">
+                ${[0,25,50,75,100].map(v=>`<option value="${v}" ${Math.round(pct/25)*25===v?'selected':''}>${v}%</option>`).join('')}
+
+              </select>`;
+    }
+
+    html += `
+      <tr data-path="${pathStr}">
+        <td>
+          <div style="display:flex;align-items:center;gap:6px;padding-left:${indent}px;">
+            ${depth>0 ? '<span style="color:var(--text-dim);font-size:11px;">└</span>' : ''}
+            <input class="cell-input name-cell sp-name" data-path="${pathStr}" value="${node.code}">
+          </div>
+        </td>
+        <td><input class="cell-input sp-person" data-path="${pathStr}" value="${node.person || ''}"></td>
+        <td>${pctCell}</td>
+        <td>
+          <div class="sp-progress-wrap">
+            <div class="sp-progress-bar"><div class="sp-progress-fill" style="width:${pct}%"></div></div>
+            <span class="sp-progress-label">${pct}%</span>
+          </div>
+        </td>
+        <td style="white-space:nowrap;">
+          <button class="btn small sp-tasks-toggle" data-path="${pathStr}" title="Show/hide tasks">${isTasksOpen?'▾':'▸'} Tasks (${taskCount})</button>
+          <button class="btn small sp-add-sub" data-path="${pathStr}" title="Add nested sub-project">+ Sub</button>
+          <button class="row-del sp-del" data-path="${pathStr}" title="Delete">✕</button>
+        </td>
+      </tr>
+    `;
+
+    if(isTasksOpen){
+      html += `
+        <tr class="task-panel-row" data-path="${pathStr}">
+          <td colspan="6">
+            <div class="task-panel">
+              ${buildTaskRows(node, pathStr)}
+              <button class="btn small sp-add-task" data-path="${pathStr}" style="margin-top:6px;">+ Add task</button>
+            </div>
+          </td>
+        </tr>
+      `;
+    }
+
+    if(hasChildren){
+      html += buildSubProjRows(node.subProjects, curPath);
+    }
+  });
+  return html;
+}
+
+function fileIconClass(name){
+  const ext = (name.split('.').pop() || '').toLowerCase();
+  if(ext === 'pdf') return 'pdf';
+  if(['xls','xlsx','csv'].includes(ext)) return 'xls';
+  return '';
+}
+
+function renderAttachments(){
+  const p = projects[activeIndex];
+  if(!p.attachments) p.attachments = [];
+  const el = document.getElementById('attachList');
+  if(!p.attachments.length){
+    el.innerHTML = `<div class="attach-empty">No attachments yet.</div>`;
+    return;
+  }
+  el.innerHTML = p.attachments.map((a,i)=>{
+    const ext = (a.name.split('.').pop() || '').toUpperCase();
+    return `
+      <div class="attach-row">
+        <span class="a-icon ${fileIconClass(a.name)}">${ext}</span>
+        <span class="a-name">${a.name}</span>
+        <a class="a-view" href="${a.url}" target="_blank" rel="noopener">View / Download</a>
+        <button class="row-del attach-del" data-idx="${i}" title="Remove attachment">✕</button>
+      </div>
+    `;
+  }).join('');
+  el.querySelectorAll('.attach-del').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      const idx = parseInt(e.target.dataset.idx,10);
+      URL.revokeObjectURL(p.attachments[idx].url);
+      p.attachments.splice(idx,1);
+      renderAttachments();
+    });
+  });
+}
+
+document.getElementById('attachUploadBtn').addEventListener('click', ()=>{
+  document.getElementById('attachFileInput').click();
+});
+
+document.getElementById('attachFileInput').addEventListener('change', e=>{
+  const p = projects[activeIndex];
+  if(!p.attachments) p.attachments = [];
+  Array.from(e.target.files).forEach(file=>{
+    const url = URL.createObjectURL(file);
+    p.attachments.push({name:file.name, url});
+
+    const ext = (file.name.split('.').pop() || '').toLowerCase();
+    if(ext === 'xlsx' || ext === 'xls' || ext === 'csv'){
+      const reader = new FileReader();
+      reader.onload = function(evt){
+        try{
+          const data = new Uint8Array(evt.target.result);
+          const workbook = XLSX.read(data, {type:'array'});
+          const firstSheetName = workbook.SheetNames[0];
+          const sheet = workbook.Sheets[firstSheetName];
+          const rows = XLSX.utils.sheet_to_json(sheet, {header:1, blankrows:false});
+          const dataRows = rows; // read every row starting from row 1, no header skipped
+          const names = dataRows.map(row => row && row[0]);
+          applySubProjectNames(p, names);
+          document.getElementById('subProjQtyInput').value = names.length;
+          renderAll();
+        }catch(err){
+          console.error('Could not read spreadsheet:', err);
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    }
+  });
+  e.target.value = '';
+  renderAttachments();
+});
+
+function renderProjectTasks(){
+  const p = projects[activeIndex];
+  if(!p.tasks) p.tasks = [];
+  document.getElementById('projTaskBody').innerHTML = buildTaskRowsOnly(p, 'root');
+}
+
+function collectAllTasks(node, out){
+  (node.tasks || []).forEach(t => out.push(t));
+  (node.subProjects || []).forEach(c => collectAllTasks(c, out));
+}
+
+function renderTaskSummary(){
+  const p = projects[activeIndex];
+  const allTasks = [];
+  collectAllTasks(p, allTasks);
+
+  const TYPES = ["Bare Structure", "Small Frames", "GA Dwg"];
+  const body = document.getElementById('taskSummaryBody');
+  body.innerHTML = TYPES.map(typeName=>{
+    const matches = allTasks.filter(t => t.name === typeName);
+    const total = matches.length;
+    const done = matches.filter(t => Number(t.completed) === 100).length;
+    const pending = total - done;
+    return `
+      <tr>
+        <td>${typeName}</td>
+        <td>${total}</td>
+        <td class="comp-cell">${done}</td>
+        <td class="pend-cell">${pending}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function renderSubProjects(){
+  const p = projects[activeIndex];
+  if(!p.subProjects) p.subProjects = [];
+  document.getElementById('subProjBody').innerHTML = buildSubProjRows(p.subProjects, []);
+  document.getElementById('subProjQtyInput').value = p.subProjects.length;
+}
+
+document.getElementById('subProjBody').addEventListener('input', e=>{
+  const p = projects[activeIndex];
+  const pathAttr = e.target.dataset.path;
+  if(!pathAttr) return;
+  const path = pathAttr.split('-').map(Number);
+  const node = getNodeByPath(p, path);
+  const taskIdxAttr = e.target.dataset.taskIdx;
+
+  if(taskIdxAttr !== undefined){
+    const ti = parseInt(taskIdxAttr,10);
+    const task = (node.tasks || [])[ti];
+    if(!task) return;
+    if(e.target.classList.contains('t-name')) task.name = e.target.value;
+    else if(e.target.classList.contains('t-planned')){
+      task.plannedDate = e.target.value;
+      renderCalendar();
+      renderCalSelected();
+    } else if(e.target.classList.contains('t-completed-date')){
+      task.completedDate = e.target.value;
+      renderCalendar();
+      renderCalSelected();
+    }
+    return;
+  }
+
+  if(e.target.classList.contains('sp-name')){
+    node.code = e.target.value;
+  } else if(e.target.classList.contains('sp-person')){
+    node.person = e.target.value;
+  }
+});
+
+document.getElementById('subProjBody').addEventListener('change', e=>{
+  const p = projects[activeIndex];
+  const pathAttr = e.target.dataset.path;
+  if(!pathAttr) return;
+  const path = pathAttr.split('-').map(Number);
+  const node = getNodeByPath(p, path);
+  const taskIdxAttr = e.target.dataset.taskIdx;
+
+  if(taskIdxAttr !== undefined && e.target.classList.contains('t-done')){
+    const ti = parseInt(taskIdxAttr,10);
+    const task = (node.tasks || [])[ti];
+    if(!task) return;
+    task.completed = e.target.checked ? 100 : 0;
+    renderAll();
+    return;
+  }
+
+  if(taskIdxAttr !== undefined && e.target.classList.contains('t-completed')){
+    const ti = parseInt(taskIdxAttr,10);
+    const task = (node.tasks || [])[ti];
+    if(!task) return;
+    let v = parseInt(e.target.value,10);
+    if(isNaN(v)) v = 0;
+    task.completed = Math.max(0, Math.min(100, v));
+    renderAll();
+    return;
+  }
+
+  if(e.target.classList.contains('sp-completed')){
+    let v = parseInt(e.target.value,10);
+    if(isNaN(v)) v = 0;
+    node.completed = Math.max(0, Math.min(100, v));
+    renderAll();
+  }
+});
+
+document.getElementById('subProjBody').addEventListener('click', e=>{
+  const p = projects[activeIndex];
+  const pathAttr = e.target.dataset.path;
+  if(!pathAttr) return;
+  const path = pathAttr.split('-').map(Number);
+  const taskIdxAttr = e.target.dataset.taskIdx;
+
+  if(e.target.classList.contains('t-del') && taskIdxAttr !== undefined){
+    const node = getNodeByPath(p, path);
+    const ti = parseInt(taskIdxAttr,10);
+    node.tasks.splice(ti,1);
+    renderAll();
+    return;
+  }
+
+  if(e.target.classList.contains('sp-tasks-toggle')){
+    if(expandedTaskSet.has(pathAttr)) expandedTaskSet.delete(pathAttr); else expandedTaskSet.add(pathAttr);
+    renderSubProjects();
+    return;
+  }
+
+  if(e.target.classList.contains('sp-add-task')){
+    const node = getNodeByPath(p, path);
+    if(!node.tasks) node.tasks = [];
+    node.tasks.push({name:"New task", plannedDate:(p.startDate || ""), completedDate:"", completed:0});
+    expandedTaskSet.add(pathAttr);
+    renderAll();
+    return;
+  }
+
+  if(e.target.classList.contains('sp-add-sub')){
+    const node = getNodeByPath(p, path);
+    if(!node.subProjects) node.subProjects = [];
+    node.subProjects.push({code:"New sub-project", person:p.person, completed:0, subProjects:[], tasks:defaultTasks()});
+    renderAll();
+  } else if(e.target.classList.contains('sp-del')){
+    const {arr, idx} = getContainerAndIndex(p, path);
+    arr.splice(idx,1);
+    renderAll();
+  }
+});
+
+document.getElementById('projTaskBody').addEventListener('input', e=>{
+  const p = projects[activeIndex];
+  const tiAttr = e.target.dataset.taskIdx;
+  if(tiAttr === undefined) return;
+  const task = (p.tasks || [])[parseInt(tiAttr,10)];
+  if(!task) return;
+  if(e.target.classList.contains('t-name')){
+    task.name = e.target.value;
+  } else if(e.target.classList.contains('t-planned')){
+    task.plannedDate = e.target.value;
+    renderCalendar();
+    renderCalSelected();
+    renderProjectTasks();
+  } else if(e.target.classList.contains('t-completed-date')){
+    task.completedDate = e.target.value;
+    renderCalendar();
+    renderCalSelected();
+  }
+});
+
+document.getElementById('projTaskBody').addEventListener('change', e=>{
+  const p = projects[activeIndex];
+  const tiAttr = e.target.dataset.taskIdx;
+  if(tiAttr === undefined) return;
+  const task = (p.tasks || [])[parseInt(tiAttr,10)];
+  if(!task) return;
+  if(e.target.classList.contains('t-done')){
+    task.completed = e.target.checked ? 100 : 0;
+    renderAll();
+  } else if(e.target.classList.contains('t-completed')){
+    let v = parseInt(e.target.value,10);
+    if(isNaN(v)) v = 0;
+    task.completed = Math.max(0, Math.min(100, v));
+    renderAll();
+  }
+});
+
+document.getElementById('projTaskBody').addEventListener('click', e=>{
+  const p = projects[activeIndex];
+  const tiAttr = e.target.dataset.taskIdx;
+  if(e.target.classList.contains('t-del') && tiAttr !== undefined){
+    p.tasks.splice(parseInt(tiAttr,10),1);
+    renderAll();
+  }
+});
+
+document.getElementById('addProjTaskBtn').addEventListener('click', ()=>{
+  const p = projects[activeIndex];
+  if(!p.tasks) p.tasks = [];
+  p.tasks.push({name:"New task", plannedDate:(p.startDate || ""), completedDate:"", completed:0});
+  renderAll();
+});
+
+document.getElementById('addSubProjBtn').addEventListener('click', ()=>{
+  const p = projects[activeIndex];
+  if(!p.subProjects) p.subProjects = [];
+  p.subProjects.push({code:"New sub-project", person:p.person, completed:0, subProjects:[], tasks:defaultTasks()});
+  renderAll();
+});
+
+function applySubProjectQuantity(p, qty){
+  if(!p.subProjects) p.subProjects = [];
+  if(isNaN(qty) || qty < 0) qty = 0;
+  const current = p.subProjects.length;
+  if(qty > current){
+    for(let i=current; i<qty; i++){
+      p.subProjects.push({code:`Sub-project ${i+1}`, person:p.person, completed:0, subProjects:[], tasks:defaultTasks()});
+    }
+  } else if(qty < current){
+    p.subProjects.splice(qty);
+  }
+}
+
+function applySubProjectNames(p, names){
+  applySubProjectQuantity(p, names.length);
+  names.forEach((name, i)=>{
+    const clean = (name === undefined || name === null || String(name).trim() === '') ? `Sub-project ${i+1}` : String(name).trim();
+    p.subProjects[i].code = clean;
+  });
+}
+
+document.getElementById('subProjQtyInput').addEventListener('change', e=>{
+  const p = projects[activeIndex];
+  applySubProjectQuantity(p, parseInt(e.target.value,10));
+  renderAll();
+});
+
+function renderAll(){
+  renderSummary();
+  renderCombinedTrend();
+  renderCalendar();
+  renderCalSelected();
+  renderDetail();
+}
+
+function renderSummary(){
+  const avg = Math.round(projects.reduce((s,p)=>s+todayVal(p),0)/projects.length);
+  let onTrack=0, watch=0, behind=0;
+  projects.forEach(p=>{
+    const s = statusFor(p);
+    if(s.cls==="ontrack") onTrack++; else if(s.cls==="watch") watch++; else behind++;
+  });
+  document.getElementById('summaryRow').innerHTML = `
+    <div class="cell"><div class="label">Avg. completion (all projects)</div><div class="value cyan">${avg}%</div></div>
+    <div class="cell"><div class="label">On track</div><div class="value cyan">${onTrack}</div></div>
+    <div class="cell"><div class="label">Needs watching</div><div class="value amber">${watch}</div></div>
+    <div class="cell"><div class="label">Behind schedule</div><div class="value behind">${behind}</div></div>
+  `;
+}
+
+function collectNodeTaskDates(node, projCode, nodePath, idx){
+  (node.tasks || []).forEach(t=>{
+    const label = `${node.code}${node.code!==t.name ? ' / '+t.name : ''}`;
+    if(/^\d{4}-\d{2}-\d{2}$/.test(t.plannedDate||'')){
+      (idx[t.plannedDate] = idx[t.plannedDate] || []).push({label, type:'planned'});
+    }
+    if(/^\d{4}-\d{2}-\d{2}$/.test(t.completedDate||'')){
+      (idx[t.completedDate] = idx[t.completedDate] || []).push({label, type:'completed'});
+    }
+  });
+  (node.subProjects || []).forEach(c => collectNodeTaskDates(c, projCode, nodePath, idx));
+}
+
+function buildDateIndex(){
+  const idx = {};
+  const p = projects[activeIndex];
+  if(p) collectNodeTaskDates(p, p.code, [], idx);
+  return idx;
+}
+
+function pad2(n){ return String(n).padStart(2,'0'); }
+
+const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+
+document.getElementById('openCalBtn').addEventListener('click', ()=>{
+  const p = projects[activeIndex];
+  document.getElementById('calModalTitle').textContent = `Task calendar — ${p ? p.code : ''}`;
+  document.getElementById('calModalOverlay').classList.add('open');
+  renderCalendar();
+  renderCalSelected();
+});
+
+document.getElementById('closeCalBtn').addEventListener('click', ()=>{
+  document.getElementById('calModalOverlay').classList.remove('open');
+});
+
+document.getElementById('calModalOverlay').addEventListener('click', e=>{
+  if(e.target.id === 'calModalOverlay'){
+    document.getElementById('calModalOverlay').classList.remove('open');
+  }
+});
+
+function renderCalendar(){
+  const idx = buildDateIndex();
+  document.getElementById('calMonthLabel').textContent = `${MONTH_NAMES[calMonth-1]} ${calYear}`;
+
+  const grid = document.getElementById('calGrid');
+  const daysInMonth = new Date(calYear, calMonth, 0).getDate();
+  const firstDow = new Date(calYear, calMonth-1, 1).getDay();
+
+  let html = "";
+  ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].forEach(d=> html += `<div class="cal-dow">${d}</div>`);
+  for(let i=0;i<firstDow;i++) html += `<div class="cal-day empty"></div>`;
+
+  for(let day=1; day<=daysInMonth; day++){
+    const key = `${calYear}-${pad2(calMonth)}-${pad2(day)}`;
+    const entries = idx[key] || [];
+    const isSelected = selectedCalDate === key;
+    const maxShow = 3;
+    const shown = entries.slice(0, maxShow);
+    const extra = entries.length - shown.length;
+    const taskLines = shown.map(e=>`<div class="d-task ${e.type}" title="${e.label} (${e.type})">${e.label}</div>`).join('');
+    const moreLine = extra > 0 ? `<div class="d-more">+${extra} more</div>` : '';
+    html += `
+      <div class="cal-day ${isSelected?'selected':''} ${entries.length?'has-tasks':''}" data-key="${key}">
+        <div class="d-num">${day}</div>
+        <div class="d-tasks">${taskLines}${moreLine}</div>
+      </div>
+    `;
+  }
+
+  grid.innerHTML = html;
+  grid.querySelectorAll('.cal-day:not(.empty)').forEach(cell=>{
+    cell.addEventListener('click', ()=>{
+      selectedCalDate = cell.dataset.key;
+      if(lastFocusedDateInput && document.body.contains(lastFocusedDateInput)){
+        lastFocusedDateInput.value = selectedCalDate;
+        lastFocusedDateInput.dispatchEvent(new Event('input', {bubbles:true}));
+        lastFocusedDateInput.focus();
+      }
+      renderCalendar();
+      renderCalSelected();
+    });
+  });
+}
+
+function renderCalSelected(){
+  const el = document.getElementById('calSelected');
+  if(!selectedCalDate){
+    el.innerHTML = `<div class="cal-empty-msg">Click a date on the calendar to see its tasks.</div>`;
+    return;
+  }
+  const idx = buildDateIndex();
+  const entries = idx[selectedCalDate] || [];
+  if(!entries.length){
+    el.innerHTML = `<div class="cs-title">${selectedCalDate}</div><div class="cal-empty-msg">No tasks planned or completed on this date.</div>`;
+    return;
+  }
+  el.innerHTML = `
+    <div class="cs-title">Tasks on ${selectedCalDate}</div>
+    ${entries.map(e => `
+      <div class="cal-task-row">
+        <span class="badge ${e.type}">${e.type}</span>
+        <span class="cs-path">${e.label}</span>
+      </div>
+    `).join('')}
+  `;
+}
+
+document.getElementById('calPrevBtn').addEventListener('click', ()=>{
+  calMonth--;
+  if(calMonth < 1){ calMonth = 12; calYear--; }
+  renderCalendar();
+});
+document.getElementById('calNextBtn').addEventListener('click', ()=>{
+  calMonth++;
+  if(calMonth > 12){ calMonth = 1; calYear++; }
+  renderCalendar();
+});
+
+const COMBINED_COLORS = ["#1F7A94","#A8641A","#3D7A4E","#A83E6E","#6B4FA0","#8A6F1E","#2F5F8A","#B2502F"];
+
+function renderCombinedTrend(){
+  const svg = document.getElementById('combinedTrendSvg');
+  const legendEl = document.getElementById('combinedLegend');
+  const W=1080,H=220,padL=36,padR=16,padT=16,padB=32;
+
+  const n = projects.length;
+  const y = v => H-padB - (v/100)*(H-padT-padB);
+  const plotW = W-padL-padR;
+  const slot = plotW / Math.max(1,n);
+  const barW = Math.min(56, slot*0.55);
+
+  let gridLines = "";
+  [0,25,50,75,100].forEach(v=>{
+    gridLines += `<line x1="${padL}" y1="${y(v)}" x2="${W-padR}" y2="${y(v)}" stroke="var(--grid-line-strong)" stroke-width="1"/>`;
+    gridLines += `<text x="4" y="${y(v)+3}" fill="var(--text-dim)" font-size="9">${v}</text>`;
+  });
+
+  let bars = "";
+  let legendHtml = "";
+  projects.forEach((p,pi)=>{
+    const color = COMBINED_COLORS[pi % COMBINED_COLORS.length];
+    const comp = todayVal(p);
+    const pend = 100-comp;
+    const cx = padL + slot*pi + slot/2;
+    const bx = cx - barW/2;
+
+    bars += `<rect x="${bx.toFixed(1)}" y="${y(100).toFixed(1)}" width="${barW.toFixed(1)}" height="${(y(0)-y(100)).toFixed(1)}" fill="var(--accent-amber)" opacity="0.35"/>`;
+    bars += `<rect x="${bx.toFixed(1)}" y="${y(comp).toFixed(1)}" width="${barW.toFixed(1)}" height="${(y(0)-y(comp)).toFixed(1)}" fill="${color}"/>`;
+    bars += `<text x="${cx.toFixed(1)}" y="${(y(comp)-6).toFixed(1)}" fill="${color}" font-size="11" font-weight="600" text-anchor="middle">${comp}%</text>`;
+    const label = p.code.length > 12 ? p.code.slice(0,11)+'…' : p.code;
+    bars += `<text x="${cx.toFixed(1)}" y="${H-8}" fill="var(--text-dim)" font-size="9" text-anchor="middle"><title>${p.code}</title>${label}</text>`;
+
+    legendHtml += `<div class="leg-item"><span class="swatch" style="background:${color}"></span>${p.code} — ${comp}% done, ${pend}% pending</div>`;
+  });
+
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.innerHTML = `${gridLines}${bars}`;
+  legendEl.innerHTML = legendHtml;
+}
+
+function renderDetail(){
+  const p = projects[activeIndex];
+  document.getElementById('detailTitle').textContent = `${p.code} — ${p.person}`;
+
+  const sel = document.getElementById('projectSelect');
+  sel.innerHTML = projects.map((proj,i)=>`<option value="${i}" ${i===activeIndex?'selected':''}>${proj.code} — ${proj.person}</option>`).join('');
+
+  document.getElementById('nameInput').value = p.code;
+  document.getElementById('personInput').value = p.person;
+  document.getElementById('startDateInput').value = p.startDate || '';
+  document.getElementById('endDateInput').value = p.endDate || '';
+
+  renderAttachments();
+  renderTaskSummary();
+  renderSubProjects();
+  renderProjectTasks();
+}
+
+document.getElementById('projectSelect').addEventListener('change', e=>{
+  activeIndex = parseInt(e.target.value,10);
+  selectedCalDate = null;
+  renderAll();
+});
+
+document.getElementById('deleteProjectBtn').addEventListener('click', ()=>{
+  if(projects.length <= 1){ alert('At least one project is required.'); return; }
+  projects.splice(activeIndex,1);
+  if(activeIndex >= projects.length) activeIndex = projects.length-1;
+  renderAll();
+});
+
+document.getElementById('nameInput').addEventListener('input', e=>{
+  projects[activeIndex].code = e.target.value;
+  document.getElementById('detailTitle').textContent = `${projects[activeIndex].code} — ${projects[activeIndex].person}`;
+  const opt = document.getElementById('projectSelect').options[activeIndex];
+  if(opt) opt.textContent = `${projects[activeIndex].code} — ${projects[activeIndex].person}`;
+  renderSummary();
+  renderCombinedTrend();
+  renderCalendar();
+  renderCalSelected();
+});
+
+document.getElementById('personInput').addEventListener('input', e=>{
+  projects[activeIndex].person = e.target.value;
+  document.getElementById('detailTitle').textContent = `${projects[activeIndex].code} — ${projects[activeIndex].person}`;
+  const opt = document.getElementById('projectSelect').options[activeIndex];
+  if(opt) opt.textContent = `${projects[activeIndex].code} — ${projects[activeIndex].person}`;
+});
+
+document.getElementById('startDateInput').addEventListener('input', e=>{
+  projects[activeIndex].startDate = e.target.value;
+  renderSubProjects();
+});
+
+document.getElementById('endDateInput').addEventListener('input', e=>{
+  projects[activeIndex].endDate = e.target.value;
+  renderSubProjects();
+});
+
+document.getElementById('addProjectBtn').addEventListener('click', ()=>{
+  const n = projects.length + 1;
+  projects.push({ code:`PROJECT ${n}`, person:`Person ${n}`, planned:70, completed:0, startDate:"", endDate:"", subProjects:[] });
+  activeIndex = projects.length - 1;
+  renderAll();
+});
+
+renderAll();
+</script>
+
+</body>
+</html>
